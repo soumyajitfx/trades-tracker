@@ -13,6 +13,9 @@ def test_fetch_mt5_trades_derives_open_price_from_entry(monkeypatch):
         DEAL_ENTRY_OUT=1,
         DEAL_TYPE_BUY=0,
         DEAL_TYPE_SELL=1,
+        initialize=lambda **kwargs: True,
+        shutdown=lambda: None,
+        last_error=lambda: (0, ""),
     )
     deals = [
         SimpleNamespace(ticket=10, position_id=501, entry=fake_mt5.DEAL_ENTRY_IN, type=fake_mt5.DEAL_TYPE_BUY, symbol="EURUSD", volume=0.4, price=1.1000, sl=1.09, tp=1.12, profit=0.0, time=100),
@@ -21,9 +24,6 @@ def test_fetch_mt5_trades_derives_open_price_from_entry(monkeypatch):
     ]
 
     monkeypatch.setattr(mt5_service, "mt5", fake_mt5)
-    monkeypatch.setattr(mt5_service.mt5, "initialize", lambda **kwargs: True)
-    monkeypatch.setattr(mt5_service.mt5, "shutdown", lambda: None)
-    monkeypatch.setattr(mt5_service.mt5, "last_error", lambda: (0, ""))
     monkeypatch.setattr(mt5_service.mt5, "history_deals_get", lambda _from, _to: deals)
 
     rows = mt5_service.fetch_mt5_trades()
