@@ -24,7 +24,10 @@ def test_fetch_mt5_trades_derives_open_price_from_entry(monkeypatch):
     ]
 
     monkeypatch.setattr(mt5_service, "mt5", fake_mt5)
-    monkeypatch.setattr(mt5_service.mt5, "history_deals_get", lambda _from, _to: deals)
+    monkeypatch.setattr(mt5_service.mt5, "history_deals_get", lambda _from, _to: deals, raising=False)
+    monkeypatch.setattr(mt5_service.settings, "mt5_login", 123456)
+    monkeypatch.setattr(mt5_service.settings, "mt5_password", "secret")
+    monkeypatch.setattr(mt5_service.settings, "mt5_server", "demo")
 
     rows = mt5_service.fetch_mt5_trades()
 
