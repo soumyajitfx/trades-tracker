@@ -1,0 +1,16 @@
+:root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+body { margin: 0; background:#0f172a; color:#e2e8f0; }
+.app { max-width: 1100px; margin:0 auto; padding: 1rem; }
+nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+.links { display:flex; gap:.8rem; align-items:center; }
+.card { background:#1e293b; border-radius:12px; padding:1rem; margin-bottom:1rem; }
+.grid { display:grid; gap:1rem; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); }
+input,select,button { padding:.5rem; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; }
+button { cursor:pointer; }
+.filters { display:flex; gap:.5rem; flex-wrap:wrap; }
+table { width:100%; border-collapse:collapse; }
+th,td { padding:.5rem; border-bottom:1px solid #334155; text-align:left; }
+.auth { max-width:380px; margin:4rem auto; }
+.auth form { display:grid; gap:.75rem; }
+.link-btn { margin-top:.75rem; width:100%; }
+.error { color:#f87171; }
