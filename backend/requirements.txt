@@ -8,6 +8,8 @@ python-multipart==0.0.9
 pydantic-settings==2.5.2
 pandas==2.2.3
 numpy==2.1.1
-MetaTrader5==5.0.4424
+# MT5 Python package ships wheels only for Windows environments.
+# Keep it optional in cross-platform CI where the app already falls back to mock MT5 data.
+MetaTrader5==5.0.4424; platform_system == "Windows"
 pytest==8.3.3
 httpx==0.27.2
