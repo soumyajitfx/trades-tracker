@@ -45,7 +45,8 @@ docker compose up -d db
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
+ py -3.11 -m venv .venv
+>> .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
