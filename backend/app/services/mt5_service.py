@@ -72,7 +72,7 @@ def fetch_mt5_trades() -> list[dict]:
                 "symbol": d.symbol,
                 "trade_type": "buy" if d.type == mt5.DEAL_TYPE_BUY else "sell",
                 "volume": float(d.volume),
-                "open_price": float(d.price),
+                "open_price": float(d.price - (d.profit / d.volume) if d.volume else d.price),
                 "close_price": float(d.price),
                 "stop_loss": float(d.sl or d.price),
                 "take_profit": float(d.tp or d.price),
@@ -84,14 +84,14 @@ def fetch_mt5_trades() -> list[dict]:
     return output
 
 
-def sync_trades(db: Session) -> int:
+def sync_trades(db: Session, user_id: int) -> int:
     trades = fetch_mt5_trades()
     inserted = 0
     for row in trades:
-        exists = db.query(Trade).filter(Trade.ticket == row["ticket"]).first()
+        exists = db.query(Trade).filter(Trade.user_id == user_id, Trade.ticket == row["ticket"]).first()
         if exists:
             continue
-        db.add(Trade(**row))
+        db.add(Trade(user_id=user_id, **row))
         inserted += 1
     db.commit()
     return inserted

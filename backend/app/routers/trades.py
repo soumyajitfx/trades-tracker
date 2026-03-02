@@ -14,9 +14,9 @@ router = APIRouter(prefix="/api/trades", tags=["trades"])
 
 
 @router.post("/sync")
-def sync_now(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def sync_now(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        inserted = sync_trades(db)
+        inserted = sync_trades(db, current_user.id)
         state = db.query(SyncState).first() or SyncState()
         state.successful = True
         state.last_sync = datetime.utcnow()
@@ -36,14 +36,14 @@ def sync_now(_: User = Depends(get_current_user), db: Session = Depends(get_db))
 
 @router.get("", response_model=list[TradeOut])
 def get_trades(
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     start: datetime | None = Query(default=None),
     end: datetime | None = Query(default=None),
     symbol: str | None = Query(default=None),
     trade_type: str | None = Query(default=None),
 ):
-    q = db.query(Trade)
+    q = db.query(Trade).filter(Trade.user_id == current_user.id)
     if start:
         q = q.filter(Trade.close_time >= start)
     if end:
@@ -57,11 +57,11 @@ def get_trades(
 
 @router.get("/metrics")
 def metrics(
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     start: datetime | None = Query(default=None),
     end: datetime | None = Query(default=None),
     symbol: str | None = Query(default=None),
     trade_type: str | None = Query(default=None),
 ):
-    return compute_metrics(db, start, end, symbol, trade_type)
+    return compute_metrics(db, current_user.id, start, end, symbol, trade_type)

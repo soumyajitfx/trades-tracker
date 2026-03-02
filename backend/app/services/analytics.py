@@ -17,8 +17,15 @@ def _rr(trade: Trade) -> float:
     return signed if trade.profit >= 0 else -signed
 
 
-def compute_metrics(db: Session, start: datetime | None, end: datetime | None, symbol: str | None, trade_type: str | None):
-    q = db.query(Trade)
+def compute_metrics(
+    db: Session,
+    user_id: int,
+    start: datetime | None,
+    end: datetime | None,
+    symbol: str | None,
+    trade_type: str | None,
+):
+    q = db.query(Trade).filter(Trade.user_id == user_id)
     if start:
         q = q.filter(Trade.close_time >= start)
     if end:
