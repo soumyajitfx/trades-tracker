@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -17,9 +17,11 @@ class User(Base):
 
 class Trade(Base):
     __tablename__ = "trades"
+    __table_args__ = (UniqueConstraint("user_id", "ticket", name="uq_trades_user_ticket"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    ticket: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    ticket: Mapped[int] = mapped_column(Integer, index=True)
     symbol: Mapped[str] = mapped_column(String(24), index=True)
     trade_type: Mapped[str] = mapped_column(String(8), index=True)
     volume: Mapped[float] = mapped_column(Float)
