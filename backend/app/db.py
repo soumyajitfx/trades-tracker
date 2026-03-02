@@ -116,13 +116,14 @@ def run_schema_migrations() -> None:
         return
 
     columns = {c["name"] for c in inspector.get_columns("trades")}
+    unique_constraints = inspector.get_unique_constraints("trades")
     has_user_id = "user_id" in columns
     needs_migration = not has_user_id
+    has_scoped_unique = any(tuple(c["column_names"]) == ("user_id", "ticket") for c in unique_constraints)
+    global_ticket_uniques = [c for c in unique_constraints if tuple(c["column_names"]) == ("ticket",)]
 
     if not needs_migration:
-        unique_constraints = inspector.get_unique_constraints("trades")
-        has_scoped_unique = any(tuple(c["column_names"]) == ("user_id", "ticket") for c in unique_constraints)
-        has_global_ticket_unique = any(tuple(c["column_names"]) == ("ticket",) for c in unique_constraints)
+        has_global_ticket_unique = bool(global_ticket_uniques)
         needs_migration = has_global_ticket_unique or not has_scoped_unique
 
     if not needs_migration:
@@ -137,6 +138,19 @@ def run_schema_migrations() -> None:
             conn.execute(text("ALTER TABLE trades ADD COLUMN user_id INTEGER"))
         legacy_user_id = _resolve_backfill_user_id(conn)
         conn.execute(text("UPDATE trades SET user_id = :legacy_user_id WHERE user_id IS NULL"), {"legacy_user_id": legacy_user_id})
+
+        if engine.dialect.name == "postgresql":
+            for constraint in global_ticket_uniques:
+                if constraint.get("name"):
+                    conn.execute(text(f'ALTER TABLE trades DROP CONSTRAINT IF EXISTS "{constraint["name"]}"'))
+            if not has_scoped_unique:
+                conn.execute(text("ALTER TABLE trades ADD CONSTRAINT uq_trades_user_ticket UNIQUE (user_id, ticket)"))
+        elif engine.dialect.name in {"mysql", "mariadb"}:
+            for constraint in global_ticket_uniques:
+                if constraint.get("name"):
+                    conn.execute(text(f"ALTER TABLE trades DROP INDEX `{constraint['name']}`"))
+            if not has_scoped_unique:
+                conn.execute(text("ALTER TABLE trades ADD UNIQUE INDEX uq_trades_user_ticket (user_id, ticket)"))
 
 
 def get_db():

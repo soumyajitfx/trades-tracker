@@ -24,13 +24,16 @@ def test_fetch_mt5_trades_derives_open_price_from_entry(monkeypatch):
     ]
 
     monkeypatch.setattr(mt5_service, "mt5", fake_mt5)
-    monkeypatch.setattr(mt5_service.mt5, "history_deals_get", lambda _from, _to: deals)
+    monkeypatch.setattr(mt5_service.mt5, "history_deals_get", lambda _from, _to: deals, raising=False)
+    monkeypatch.setattr(mt5_service.settings, "mt5_login", 123456)
+    monkeypatch.setattr(mt5_service.settings, "mt5_password", "secret")
+    monkeypatch.setattr(mt5_service.settings, "mt5_server", "demo")
 
     rows = mt5_service.fetch_mt5_trades()
 
     assert len(rows) == 1
     # weighted entry price = (0.4*1.10 + 0.6*1.20) / 1.0
-    assert rows[0]["open_price"] == 1.16
+    assert rows[0]["open_price"] == pytest.approx(1.16)
     assert rows[0]["close_price"] == 1.25
 
 
@@ -63,6 +66,51 @@ def test_run_schema_migrations_backfills_user_id_on_existing_trades(monkeypatch,
     with test_engine.begin() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM trades WHERE ticket = 777")).scalar_one()
     assert count == 2
+
+
+def test_run_schema_migrations_non_sqlite_replaces_global_ticket_unique(monkeypatch):
+    executed = []
+
+    class FakeConn:
+        def execute(self, statement, params=None):
+            executed.append((str(statement), params or {}))
+
+    class FakeBegin:
+        def __enter__(self):
+            return FakeConn()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeEngine:
+        class dialect:
+            name = "postgresql"
+
+        def begin(self):
+            return FakeBegin()
+
+    class FakeInspector:
+        def get_table_names(self):
+            return ["trades", "users"]
+
+        def get_columns(self, _table):
+            return [{"name": "id"}, {"name": "user_id"}, {"name": "ticket"}]
+
+        def get_unique_constraints(self, _table):
+            return [
+                {"name": "uq_trades_ticket", "column_names": ["ticket"]},
+            ]
+
+    monkeypatch.setattr("app.db.engine", FakeEngine())
+    monkeypatch.setattr("app.db.inspect", lambda _engine: FakeInspector())
+    monkeypatch.setattr("app.db._resolve_backfill_user_id", lambda _conn: 42)
+
+    run_schema_migrations()
+
+    sql = "\n".join(stmt for stmt, _ in executed)
+    assert "UPDATE trades SET user_id = :legacy_user_id WHERE user_id IS NULL" in sql
+    assert "ALTER TABLE trades DROP CONSTRAINT IF EXISTS \"uq_trades_ticket\"" in sql
+    assert "ALTER TABLE trades ADD CONSTRAINT uq_trades_user_ticket UNIQUE (user_id, ticket)" in sql
 
 
 def test_run_schema_migrations_requires_manual_mapping_if_multiple_users(monkeypatch, tmp_path):
