@@ -15,6 +15,27 @@ class MT5SyncError(Exception):
     pass
 
 
+def _entry_prices_by_position(deals) -> dict[int, float]:
+    entry_prices: dict[int, float] = {}
+    weighted_sum: dict[int, float] = {}
+    total_volume: dict[int, float] = {}
+
+    for d in sorted(deals, key=lambda x: (x.time, x.ticket)):
+        position_id = int(getattr(d, "position_id", 0) or 0)
+        if position_id == 0:
+            continue
+        if d.entry != mt5.DEAL_ENTRY_IN:
+            continue
+        volume = float(d.volume or 0)
+        if volume <= 0:
+            continue
+        weighted_sum[position_id] = weighted_sum.get(position_id, 0.0) + float(d.price) * volume
+        total_volume[position_id] = total_volume.get(position_id, 0.0) + volume
+        entry_prices[position_id] = weighted_sum[position_id] / total_volume[position_id]
+
+    return entry_prices
+
+
 def _mock_trades() -> list[dict]:
     now = datetime.utcnow()
     return [
@@ -63,16 +84,19 @@ def fetch_mt5_trades() -> list[dict]:
         raise MT5SyncError("Failed to fetch MT5 history")
 
     output = []
+    entry_prices = _entry_prices_by_position(deals)
     for d in deals:
         if d.entry != mt5.DEAL_ENTRY_OUT:
             continue
+        position_id = int(getattr(d, "position_id", 0) or 0)
+        open_price = entry_prices.get(position_id, float(d.price))
         output.append(
             {
                 "ticket": int(d.ticket),
                 "symbol": d.symbol,
                 "trade_type": "buy" if d.type == mt5.DEAL_TYPE_BUY else "sell",
                 "volume": float(d.volume),
-                "open_price": float(d.price - (d.profit / d.volume) if d.volume else d.price),
+                "open_price": float(open_price),
                 "close_price": float(d.price),
                 "stop_loss": float(d.sl or d.price),
                 "take_profit": float(d.tp or d.price),
