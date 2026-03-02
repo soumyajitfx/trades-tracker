@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import create_engine, text
 
 from app.db import Base, run_schema_migrations
@@ -39,6 +40,7 @@ def test_run_schema_migrations_backfills_user_id_on_existing_trades(monkeypatch,
 
     with test_engine.begin() as conn:
         conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(64) UNIQUE, hashed_password VARCHAR(255) NOT NULL, created_at DATETIME)"))
+        conn.execute(text("INSERT INTO users (id, username, hashed_password, created_at) VALUES (1, 'alice', 'x', CURRENT_TIMESTAMP)"))
         conn.execute(text("CREATE TABLE trades (id INTEGER PRIMARY KEY, ticket INTEGER UNIQUE, symbol VARCHAR(24), trade_type VARCHAR(8), volume FLOAT, open_price FLOAT, close_price FLOAT, stop_loss FLOAT, take_profit FLOAT, profit FLOAT, open_time DATETIME, close_time DATETIME, synced_at DATETIME, tag VARCHAR(64), notes TEXT)"))
         conn.execute(text("INSERT INTO trades (id, ticket, symbol, trade_type, volume, open_price, close_price, stop_loss, take_profit, profit, open_time, close_time, synced_at) VALUES (1, 777, 'EURUSD', 'buy', 1.0, 1.1, 1.2, 1.0, 1.3, 10.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
 
@@ -49,7 +51,7 @@ def test_run_schema_migrations_backfills_user_id_on_existing_trades(monkeypatch,
         user_id = conn.execute(text("SELECT user_id FROM trades WHERE ticket = 777")).scalar_one()
         legacy_user = conn.execute(text("SELECT username FROM users WHERE id = :id"), {"id": user_id}).scalar_one()
 
-    assert legacy_user == "legacy_migration_user"
+    assert legacy_user == "alice"
 
     # ensure user-scoped uniqueness allows same ticket for another user
     Base.metadata.create_all(test_engine)
@@ -61,3 +63,19 @@ def test_run_schema_migrations_backfills_user_id_on_existing_trades(monkeypatch,
     with test_engine.begin() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM trades WHERE ticket = 777")).scalar_one()
     assert count == 2
+
+
+def test_run_schema_migrations_requires_manual_mapping_if_multiple_users(monkeypatch, tmp_path):
+    db_path = tmp_path / "legacy-multi.sqlite3"
+    test_engine = create_engine(f"sqlite:///{db_path}")
+
+    with test_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(64) UNIQUE, hashed_password VARCHAR(255) NOT NULL, created_at DATETIME)"))
+        conn.execute(text("INSERT INTO users (id, username, hashed_password, created_at) VALUES (1, 'alice', 'x', CURRENT_TIMESTAMP)"))
+        conn.execute(text("INSERT INTO users (id, username, hashed_password, created_at) VALUES (2, 'bob', 'x', CURRENT_TIMESTAMP)"))
+        conn.execute(text("CREATE TABLE trades (id INTEGER PRIMARY KEY, ticket INTEGER UNIQUE, symbol VARCHAR(24), trade_type VARCHAR(8), volume FLOAT, open_price FLOAT, close_price FLOAT, stop_loss FLOAT, take_profit FLOAT, profit FLOAT, open_time DATETIME, close_time DATETIME, synced_at DATETIME, tag VARCHAR(64), notes TEXT)"))
+        conn.execute(text("INSERT INTO trades (id, ticket, symbol, trade_type, volume, open_price, close_price, stop_loss, take_profit, profit, open_time, close_time, synced_at) VALUES (1, 777, 'EURUSD', 'buy', 1.0, 1.1, 1.2, 1.0, 1.3, 10.0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
+
+    monkeypatch.setattr("app.db.engine", test_engine)
+    with pytest.raises(RuntimeError, match="manual migration"):
+        run_schema_migrations()

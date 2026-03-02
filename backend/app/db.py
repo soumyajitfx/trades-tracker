@@ -9,7 +9,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-def _ensure_legacy_user(conn) -> int:
+def _resolve_backfill_user_id(conn) -> int:
+    users = conn.execute(text("SELECT id FROM users ORDER BY id")).fetchall()
+    if len(users) == 1:
+        return int(users[0][0])
+    if len(users) > 1:
+        raise RuntimeError(
+            "Cannot auto-migrate legacy trades: multiple users exist and trades have no ownership. "
+            "Run a manual migration to map legacy trades to specific users before starting the app."
+        )
+
     row = conn.execute(text("SELECT id FROM users WHERE username = :username"), {"username": "legacy_migration_user"}).first()
     if row:
         return int(row[0])
@@ -27,7 +36,7 @@ def _ensure_legacy_user(conn) -> int:
 
 
 def _migrate_trades_table_sqlite(conn, has_user_id: bool) -> None:
-    legacy_user_id = _ensure_legacy_user(conn)
+    legacy_user_id = _resolve_backfill_user_id(conn)
 
     if has_user_id:
         conn.execute(text("UPDATE trades SET user_id = :legacy_user_id WHERE user_id IS NULL"), {"legacy_user_id": legacy_user_id})
@@ -126,7 +135,7 @@ def run_schema_migrations() -> None:
 
         if not has_user_id:
             conn.execute(text("ALTER TABLE trades ADD COLUMN user_id INTEGER"))
-        legacy_user_id = _ensure_legacy_user(conn)
+        legacy_user_id = _resolve_backfill_user_id(conn)
         conn.execute(text("UPDATE trades SET user_id = :legacy_user_id WHERE user_id IS NULL"), {"legacy_user_id": legacy_user_id})
 
 
